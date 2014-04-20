@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?><!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.1//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_1.dtd'><nta><declaration>// Place global declarations here.
 const int N := 4; // number of floors
+const int NO_BUTTON := -1;
 
+int[-1, N-1] firstButton = NO_BUTTON; // Initally no button is pressed and so the button queue is empty.
 bool isButtonPressed[N];
-int[0, N-1] floor = 0; // // The floor on which the lift is, initally at the ground floor.
 
 // Channels for controlling the lift.
 chan up;
@@ -11,7 +12,9 @@ chan ready;
 
 // Channels for interacting with the floors.
 chan door[N];
-chan button[N];
+chan button[N];</declaration><template><name x="5" y="5">ButtonOperator</name><declaration>// Local declarations.
+int i := 0;
+int buttonToRemove;
 
 /*
  * The queue for pressed buttons.
@@ -23,70 +26,48 @@ bool isButtonQueueEmpty() {
   return buttonQueueSize == 0;
 }
 
-void enqueueButton(int button) {
+void buttonPressed(int button) {
+
+  isButtonPressed[button] := true;
+
   buttonQueue[buttonQueueSize] := button;
   buttonQueueSize++;
+
+  // Need to have a first button if something is added in the queue.
+  if (firstButton == NO_BUTTON) {
+    firstButton := button;
+  }
 }
 
-int frontButton() {
-  return buttonQueue[0];
+void buttonUnpressed(int button) {
+
+  isButtonPressed[button] := false;
+
+  // Prepare for removing the button from the queue.
+  buttonToRemove := button;
+  i := 0;
 }
 
-int dequeueButton() {
+bool isAtButtonToRemove() {
+  return buttonQueue[i] == buttonToRemove;
+}
 
-  int button := - 1; // Error code for when the queue is empty.
 
-  // Only dequeue if there is something in the queue.
-  if (!isButtonQueueEmpty()) {
-    int button := buttonQueue[0];
-    buttonQueueSize--;
-   
-    // Just shift the queue, since the queue size is small.
-    for (i: int[0, N-2]) {
-      buttonQueue[i] := buttonQueue[i + 1];
-    }
-  }
+</declaration><location id="id0" x="-760" y="-360"></location><location id="id1" x="-848" y="-360"><name x="-984" y="-392">UpdateFirstButton</name><committed/></location><location id="id2" x="-1040" y="-360"><name x="-1152" y="-384">RemoveButton</name><committed/></location><location id="id3" x="-1040" y="-208"><name x="-1128" y="-240">FindButton</name><committed/></location><location id="id4" x="-760" y="-208"></location><init ref="id4"/><transition><source ref="id1"/><target ref="id0"/><nail x="-848" y="-304"/><nail x="-760" y="-304"/></transition><transition><source ref="id1"/><target ref="id0"/><nail x="-848" y="-416"/><nail x="-760" y="-416"/></transition><transition><source ref="id2"/><target ref="id1"/><label kind="assignment" x="-1008" y="-352">buttonQueueSize--</label></transition><transition><source ref="id2"/><target ref="id2"/><label kind="guard" x="-1160" y="-488">i &lt; buttonQueueSize - 1</label><label kind="assignment" x="-1200" y="-464">buttonQueue[i] := buttonQueue[i+1],
+i++</label><nail x="-1160" y="-360"/><nail x="-1160" y="-440"/><nail x="-1040" y="-440"/></transition><transition><source ref="id3"/><target ref="id2"/><label kind="guard" x="-1200" y="-288">isAtButtonToRemove()</label></transition><transition><source ref="id3"/><target ref="id3"/><label kind="guard" x="-1184" y="-128">!isAtButtonToRemove()</label><label kind="assignment" x="-1112" y="-112">i++</label><nail x="-1040" y="-136"/><nail x="-1160" y="-136"/><nail x="-1160" y="-208"/></transition><transition><source ref="id4"/><target ref="id3"/><label kind="select" x="-944" y="-200">level: int[0, N-1]</label><label kind="synchronisation" x="-928" y="-176">button[level]?</label><label kind="assignment" x="-968" y="-152">buttonUnpressed(level)</label></transition><transition><source ref="id4"/><target ref="id4"/><label kind="select" x="-704" y="-208">level: int[0, N-1]</label><label kind="synchronisation" x="-704" y="-184">button[level]?</label><label kind="assignment" x="-704" y="-160">buttonPressed(level)</label><nail x="-760" y="-144"/><nail x="-712" y="-144"/><nail x="-712" y="-208"/></transition></template><template><name>MainController</name><declaration>// Local declarations.
 
-  return button;
-}</declaration><template><name x="5" y="5">ButtonOperator</name><declaration>// Place local declarations here.
+int[0, N-1] floor = 0; // The floor on which the lift is, initally at the ground floor.
+int movingDirection = 0; // Move up if positive, move down if negative. Initally there is no movment direction.
 
-void pressButton(int button) {
-
-  // An already pressed button cannot be pressed again.
-  if (!isButtonPressed[button]) {
-    isButtonPressed[button] := true;
-    enqueueButton(button);
-  }
-}</declaration><location id="id0" x="-728" y="-240"></location><init ref="id0"/><transition><source ref="id0"/><target ref="id0"/><label kind="select" x="-672" y="-240">level: int[0, N-1]</label><label kind="synchronisation" x="-672" y="-216">button[level]?</label><label kind="assignment" x="-672" y="-192">pressButton(level)</label><nail x="-728" y="-176"/><nail x="-680" y="-176"/><nail x="-680" y="-240"/></transition></template><template><name>MainController</name><declaration>int movingDirection = 0; // Move up if positive, move down if negative. Initally there is no movment direction.
 
 bool needToMove() {
-  // Need to move the lift if there is a pressed button.
-  return !isButtonQueueEmpty();
+  // Need to move the lift if there is a pressed first button.
+  return firstButton != NO_BUTTON;
 }
 
 void calculateMovingDirection() {
-
-  int nextButton := frontButton();
-
-  // Might have visited its floor after pressing that button already.
-  if (isButtonPressed[nextButton]) { 
-    movingDirection := nextButton - floor;
-  }
-  else {
-    
-    // In which case just dequeue it.
-    dequeueButton();
-    movingDirection := 0;
-  }
-}
-
-void openDoor() {
-
-  // Unpress a button when the corresponding door is opened.
-  isButtonPressed[floor] := false;
-}</declaration><location id="id1" x="-536" y="-56"><name x="-632" y="-64">IssueMove</name></location><location id="id2" x="-192" y="-232"><name x="-202" y="-262">Arrived</name></location><location id="id3" x="-192" y="-152"><name x="-168" y="-160">DoorOpen</name></location><location id="id4" x="-544" y="-232"><name x="-584" y="-272">Moving</name></location><location id="id5" x="-192" y="-56"><name x="-168" y="-64">Waiting</name></location><init ref="id5"/><transition><source ref="id1"/><target ref="id5"/><label kind="guard" x="-440" y="48">movingDirection == 0</label><nail x="-536" y="40"/><nail x="-192" y="40"/></transition><transition><source ref="id1"/><target ref="id4"/><label kind="guard" x="-752" y="-184">movingDirection &gt; 0</label><label kind="synchronisation" x="-696" y="-160">up!</label><nail x="-616" y="-144"/></transition><transition><source ref="id5"/><target ref="id1"/><label kind="guard" x="-416" y="-80">needToMove()</label><label kind="assignment" x="-456" y="-40">calculateMovingDirection()</label></transition><transition><source ref="id2"/><target ref="id3"/><label kind="synchronisation" x="-168" y="-216">door[floor]!</label><label kind="assignment" x="-168" y="-200">openDoor()</label></transition><transition><source ref="id4"/><target ref="id2"/><label kind="synchronisation" x="-384" y="-264">ready?</label></transition><transition><source ref="id3"/><target ref="id5"/><label kind="synchronisation" x="-168" y="-120">door[floor]!</label></transition></template><template><name>Lift</name><declaration>void movedUp() {
-  floor++;
-}</declaration><location id="id6" x="-440" y="-136"><name x="-472" y="-168">MovingUp</name></location><location id="id7" x="-440" y="-32"></location><init ref="id7"/><transition><source ref="id6"/><target ref="id7"/><label kind="synchronisation" x="-368" y="-80">ready!</label><label kind="assignment" x="-384" y="-96">movedUp()</label><nail x="-392" y="-88"/></transition><transition><source ref="id7"/><target ref="id6"/><label kind="synchronisation" x="-528" y="-96">up?</label><nail x="-496" y="-88"/></transition></template><template><name>Floor</name><parameter>int level</parameter><location id="id8" x="-216" y="-72"><name x="-248" y="-104">DoorOpen</name></location><location id="id9" x="-328" y="40"><name x="-368" y="56">DoorClosed</name></location><location id="id10" x="-328" y="-72"><name x="-376" y="-104">ButtonPressed</name></location><init ref="id9"/><transition><source ref="id8"/><target ref="id9"/><label kind="synchronisation" x="-312" y="16">door[level]?</label><nail x="-216" y="40"/></transition><transition><source ref="id10"/><target ref="id8"/><label kind="synchronisation" x="-312" y="-64">door[level]?</label></transition><transition><source ref="id9"/><target ref="id10"/><label kind="synchronisation" x="-424" y="-32">button[level]!</label></transition></template><system>// Place template instantiations here.
+  movingDirection := firstButton - floor;
+}</declaration><location id="id5" x="-536" y="-56"><name x="-632" y="-64">IssueMove</name></location><location id="id6" x="-232" y="-232"><name x="-242" y="-262">Arrived</name></location><location id="id7" x="-232" y="-152"><name x="-208" y="-160">DoorOpen</name></location><location id="id8" x="-544" y="-232"><name x="-584" y="-272">Moving</name></location><location id="id9" x="-232" y="-56"><name x="-256" y="-40">Waiting</name></location><init ref="id9"/><transition><source ref="id6"/><target ref="id9"/><label kind="guard" x="-48" y="-160">!isButtonPressed[floor]</label><nail x="-56" y="-232"/><nail x="-56" y="-56"/></transition><transition><source ref="id5"/><target ref="id8"/><label kind="guard" x="-480" y="-176">movingDirection &lt; 0</label><label kind="synchronisation" x="-440" y="-160">down!</label><label kind="assignment" x="-440" y="-144">floor--</label><nail x="-472" y="-139"/></transition><transition><source ref="id5"/><target ref="id8"/><label kind="guard" x="-752" y="-184">movingDirection &gt; 0</label><label kind="synchronisation" x="-696" y="-160">up!</label><label kind="assignment" x="-712" y="-136">floor++</label><nail x="-616" y="-144"/></transition><transition><source ref="id9"/><target ref="id5"/><label kind="guard" x="-464" y="-80">firstButton != NO_BUTTON</label><label kind="assignment" x="-456" y="-40">calculateMovingDirection()</label></transition><transition><source ref="id6"/><target ref="id7"/><label kind="guard" x="-224" y="-216">isButtonPressed[floor]</label><label kind="synchronisation" x="-192" y="-200">door[floor]!</label></transition><transition><source ref="id8"/><target ref="id6"/><label kind="synchronisation" x="-384" y="-264">ready?</label></transition><transition><source ref="id7"/><target ref="id9"/><label kind="synchronisation" x="-216" y="-120">door[floor]!</label></transition></template><template><name>Lift</name><location id="id10" x="-440" y="-136"><name x="-472" y="-168">Moving</name></location><location id="id11" x="-440" y="-32"><name x="-448" y="-16">Idle</name></location><init ref="id11"/><transition><source ref="id11"/><target ref="id10"/><label kind="synchronisation" x="-376" y="-96">down?</label><nail x="-376" y="-88"/></transition><transition><source ref="id10"/><target ref="id11"/><label kind="synchronisation" x="-440" y="-96">ready!</label></transition><transition><source ref="id11"/><target ref="id10"/><label kind="synchronisation" x="-488" y="-96">up?</label><nail x="-504" y="-88"/></transition></template><template><name>Floor</name><parameter>int level</parameter><location id="id12" x="-128" y="40"><name x="-184" y="56">ButtonUnpressed</name></location><location id="id13" x="-128" y="-72"><name x="-160" y="-104">DoorOpen</name></location><location id="id14" x="-328" y="40"><name x="-368" y="56">DoorClosed</name></location><location id="id15" x="-328" y="-72"><name x="-376" y="-104">ButtonPressed</name></location><init ref="id14"/><transition><source ref="id12"/><target ref="id14"/><label kind="synchronisation" x="-264" y="16">door[level]?</label></transition><transition><source ref="id13"/><target ref="id12"/><label kind="synchronisation" x="-120" y="-32">button[level]!</label></transition><transition><source ref="id15"/><target ref="id13"/><label kind="synchronisation" x="-264" y="-96">door[level]?</label></transition><transition><source ref="id14"/><target ref="id15"/><label kind="synchronisation" x="-320" y="-32">button[level]!</label></transition></template><system>// Place template instantiations here.
 BO = ButtonOperator();
 MC = MainController();
 L  = Lift();
